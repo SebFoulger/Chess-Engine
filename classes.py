@@ -1,7 +1,5 @@
 
-
-from turtle import position
-
+from copy import copy, deepcopy
 
 def long_moves(piece,temp_list, max_length=8):
     temp_moves=[]
@@ -20,14 +18,43 @@ def long_moves(piece,temp_list, max_length=8):
             x+=change[0]
     return temp_moves
 
+def king_not_targeted(temp_moves, piece):
+    
+    i=0
+    while i<len(temp_moves):
+        temp_board=deepcopy(piece.board)
+        move=temp_moves[i]
+        temp_piece=temp_board.get_piece(piece.position,piece.team)
+        temp_piece.set_pos(move)
+        if temp_board.kings[['w','b'].index(piece.team)].in_target():
+            temp_moves.pop(i)
+        else:
+            i+=1
+    return temp_moves
+
 class Move:
-    def __init__(self, moved_piece_name,old_position,new_position):
+    def __init__(self, moved_piece_name,old_position,new_position, team):
         self.moved_piece_name=moved_piece_name
         self.old_position=old_position
         self.new_position=new_position
+        self.team=team
+    
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 class Board:
-    def __init__(self, pieces=[], move_history=[], most_recent_move= Move(" ",(-1,-1),(-1,-1)), taken=[[],[]]):
+    def __init__(self, pieces=[], move_history=[], most_recent_move= Move(" ",(-1,-1),(-1,-1),'w'), taken=[[],[]], current_pieces=[],kings=[]):
         if pieces==[]:
             #Initialise chess board
             white_pieces=[]
@@ -76,6 +103,8 @@ class Board:
             self.kings.append(first_row[3])
         else:
             self.pieces=pieces
+            self.current_pieces=current_pieces
+            self.kings=kings
         self.move_history=move_history
         self.most_recent_move=most_recent_move
         # taken stores [pieces that white has taken,pieces that black has taken]
@@ -101,9 +130,11 @@ class Board:
 
         taken_piece=self.get_piece(new_position,move_team)
         moving_piece=self.get_piece(old_position,move_team)
+        
         atk_team=moving_piece.get_team()
-        if taken_piece!=None:
+        if taken_piece!=None and not isinstance(taken_piece,King):
             self.taken[['w','b'].index(atk_team)].append(taken_piece)
+            
             self.current_pieces[['b','w'].index(atk_team)].remove(taken_piece)
         elif self.get_piece((new_position[0],new_position[1]-1),move_team)!=None: # En passant special case:
             if moving_piece.name=='P' and self.get_piece((new_position[0],new_position[1]-1),move_team).name=='P' and new_position[0]!=old_position[0]:
@@ -122,11 +153,12 @@ class Board:
         self.pieces[['b','w'].index(atk_team)][7-new_position[0]][7-new_position[1]]=None
 
 
-        self.move_history.append(Move(moving_piece.name,old_position,new_position))
-        self.most_recent_move=Move(moving_piece.name,old_position,new_position)
+        self.move_history.append(Move(moving_piece.name,old_position,new_position,moving_piece.get_team()))
+        self.most_recent_move=Move(moving_piece.name,old_position,new_position,moving_piece.get_team())
     
     def make_move(self,old_position,new_position,move_team):
         moving_piece=self.get_piece(old_position,move_team)
+
         if moving_piece==None:
             return False
         elif new_position not in moving_piece.get_possible_moves():
@@ -151,15 +183,21 @@ class Board:
             cur_score+=piece.score
         
         return cur_score
-    """
+    
     def checkmated(self,team):
-        king=self.kings[['w','b'].index(team)]
-        all_checked=king.in_target()
-        for move in king.get_possible_moves():
-            all_checked = all_checked and King(board,self.team,(i,self.position[1])).in_target()
-    """
+        if len(self.kings[['w','b'].index(team)].get_possible_moves())!=0:
+            return False
+        for piece in self.current_pieces[['w','b'].index(team)]:
+            if len(piece.get_possible_moves())!=0:
+                return False
         
-            
+        return True
+
+    def all_possible_moves(self,team):
+        temp_moves=[]
+        for piece in self.current_pieces[['w','b'].index(team)]:
+            temp_moves=temp_moves+(list(map(lambda x: (piece.position,x),piece.get_possible_moves(True))))
+        return temp_moves
 
     def print_board(self, perspective):
         symbol_dict={'wP':'♙','wR':'♖','wKn':'♘','wB':'♗','wK':'♔','wQ':'♕','bP':'♟','bR':'♜','bKn':'♞','bB':'♝','bK':'♚','bQ':'♛'}
@@ -188,13 +226,30 @@ class Board:
             output_list.append('   -- -- -- -- -- -- -- -- ')
         if perspective=='w':
             output_list.reverse()
+        if perspective=='b':
+            for i in range(len(output_list)):
+                output_list[i]=output_list[i][::-1]
         output_list.append('   0  1  2  3  4  5  6  7  ')
         for i in output_list:
             print(i)
+    
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 class Piece:
     
-    def __init__(self, new_board, new_team, new_position):
+    def __init__(self, new_board, new_team, new_position, has_moved=False):
         assert isinstance(new_board,Board)
         assert new_team=='w' or new_team=='b'
         assert isinstance(new_position,tuple)
@@ -204,7 +259,7 @@ class Piece:
         self.team=new_team
         self.position=new_position
         self.initial_pos=new_position
-        self.has_moved=False
+        self.has_moved=has_moved
 
 
     def get_pos(self):
@@ -224,20 +279,33 @@ class Piece:
 
     def in_target(self):
         for piece in self.board.current_pieces[['b','w'].index(self.team)]:
-            for move in piece.get_possible_moves():
+            for move in piece.get_possible_moves(check_bool=False):
                 if self.position==(7-move[0],7-move[1]):
                     return True
         return False
+    
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
 
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 class Pawn(Piece):
-    def __init__(self, new_board, new_team, new_position):
-        super().__init__(new_board,new_team, new_position)
+    def __init__(self, new_board, new_team, new_position, has_moved=False):
+        super().__init__(new_board,new_team, new_position, has_moved)
         self.name="P"
         self.score=1
         
 
-    def get_possible_moves(self):
+    def get_possible_moves(self, check_bool=True):
         temp_moves=[]
 
         # Move forwards 1:
@@ -269,54 +337,114 @@ class Pawn(Piece):
             # En passant up left
             if self.board.most_recent_move.moved_piece_name=='P' and abs(self.board.most_recent_move.new_position[1]-self.board.most_recent_move.old_position[1])==2 and self.position[0]-(7-self.board.most_recent_move.old_position[0])==1 and self.position[1]==4:
                 temp_moves.append((self.position[0]-1,self.position[1]+1))
-
-            
+        if check_bool:
+            temp_moves=king_not_targeted(temp_moves,self)
 
         return temp_moves
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 class Rook(Piece):
-    def __init__(self, new_board, new_team, new_position):
-        super().__init__(new_board,new_team, new_position)
+    def __init__(self, new_board, new_team, new_position, has_moved=False):
+        super().__init__(new_board,new_team, new_position, has_moved)
         self.name="R"
         self.score=5
     
-    def get_possible_moves(self):
+    def get_possible_moves(self, check_bool=True):
         # Note castling will be implemented in the king class
-        
-        return long_moves(self,[(1,0),(-1,0),(0,1),(0,-1)])
+        temp_moves=long_moves(self,[(1,0),(-1,0),(0,1),(0,-1)])
+        if check_bool:
+            temp_moves=king_not_targeted(temp_moves,self)
+        return temp_moves
+
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 class Bishop(Piece):
-    def __init__(self, new_board, new_team, new_position):
-        super().__init__(new_board,new_team, new_position)
+    def __init__(self, new_board, new_team, new_position, has_moved=False):
+        super().__init__(new_board,new_team, new_position, has_moved)
         self.name="B"
         self.score=3
 
     
-    def get_possible_moves(self):
-        
-        return long_moves(self,[(1,1),(-1,1),(1,-1),(-1,-1)])
+    def get_possible_moves(self, check_bool=True):
+        temp_moves=long_moves(self,[(1,1),(-1,1),(1,-1),(-1,-1)])
+        if check_bool:
+            temp_moves=king_not_targeted(temp_moves,self)
+        return temp_moves
+
+
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 class Queen(Piece):
-    def __init__(self, new_board, new_team, new_position):
-        super().__init__(new_board,new_team, new_position)
+    def __init__(self, new_board, new_team, new_position, has_moved=False):
+        super().__init__(new_board,new_team, new_position, has_moved)
         self.name="Q"
         self.score=9
 
     
-    def get_possible_moves(self):
-        
-        return long_moves(self,[(1,1),(-1,1),(1,-1),(-1,-1),(1,0),(-1,0),(0,1),(0,-1)])
+    def get_possible_moves(self, check_bool=True):
+        temp_moves=long_moves(self,[(1,1),(-1,1),(1,-1),(-1,-1),(1,0),(-1,0),(0,1),(0,-1)])
+        if check_bool:
+            temp_moves=king_not_targeted(temp_moves,self)
+        return temp_moves
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
 
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 class Knight(Piece):
-    def __init__(self, new_board, new_team, new_position):
-        super().__init__(new_board,new_team, new_position)
+    def __init__(self, new_board, new_team, new_position, has_moved=False):
+        super().__init__(new_board,new_team, new_position, has_moved)
         self.name="Kn"
         self.score=3
 
-    def get_possible_moves(self):
+    def get_possible_moves(self, check_bool=True):
         temp_moves=[]
 
         poss_moves=[(1,2),(2,1),(1,-2),(-2,1),(-1,2),(2,-1),(-1,-2),(-2,-1)]
@@ -324,26 +452,42 @@ class Knight(Piece):
         for move in poss_moves:
             cur_move=(self.position[0]+move[0],self.position[1]+move[1])
             if cur_move[0]<8 and cur_move[0]>=0 and cur_move[1]<8 and cur_move[1]>=0:
-                if board.get_piece(cur_move,self.team)==None or board.get_piece(cur_move,self.team).get_team()!=self.team:
+                if self.board.get_piece(cur_move,self.team)==None or self.board.get_piece(cur_move,self.team).get_team()!=self.team:
                     temp_moves.append(cur_move)
 
-        new_temp=temp_moves.copy()
 
+        
+        if check_bool:
+            temp_moves=king_not_targeted(temp_moves,self)
         return temp_moves
 
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
+
 class King(Piece):
-    def __init__(self, new_board, new_team, new_position):
-        super().__init__(new_board,new_team, new_position)
+    def __init__(self, new_board, new_team, new_position, has_moved=False):
+        super().__init__(new_board,new_team, new_position, has_moved)
         self.name="K"
         self.score=1000
     
-    def get_possible_moves(self):
+    def get_possible_moves(self, check_bool=True):
         temp_moves=[]
 
         # Castle left:
         empty_between=True
         for i in range(1,self.position[0]):
-            empty_between=empty_between and (self.board.get_piece((i,self.position[1]),self.team)==None) and not King(board,self.team,(i,self.position[1])).in_target()
+            empty_between=empty_between and (self.board.get_piece((i,self.position[1]),self.team)==None) and not King(self.board,self.team,(i,self.position[1])).in_target()
 
         if empty_between and not self.has_moved and self.board.get_piece((0,0),self.team)!=None and not self.in_target(): 
             if not self.board.get_piece((0,0),self.team).has_moved:
@@ -352,22 +496,29 @@ class King(Piece):
         # Castle right:
         empty_between=True
         for i in range(self.position[0]+1,7):
-            empty_between=empty_between and (self.board.get_piece((i,self.position[1]),self.team)==None) and not King(board,self.team,(i,self.position[1])).in_target()
+            empty_between=empty_between and (self.board.get_piece((i,self.position[1]),self.team)==None) and not King(self.board,self.team,(i,self.position[1])).in_target()
 
         if empty_between and not self.has_moved and self.board.get_piece((7,0),self.team)!=None and not self.in_target(): 
             if not self.board.get_piece((7,0),self.team).has_moved:
                 temp_moves.append((self.position[0]+2,self.position[1]))
 
         for move in long_moves(self,[(1,1),(-1,1),(1,-1),(-1,-1),(1,0),(-1,0),(0,1),(0,-1)], max_length=1):
-            if not King(board,self.team,move).in_target():
+            if not King(self.board,self.team,move).in_target():
                 temp_moves.append(move)
+        if check_bool:
+            temp_moves=king_not_targeted(temp_moves,self)
         return temp_moves
-board=Board()
+    
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
 
-board.make_move((3,1),(3,3),'w')
-board.make_move((5,1),(5,3),'b')
-board.make_move((4,0),(7,3),'b')
-board.make_move((4,1),(4,3),'w')
-board.print_board('w')
-
-print(board.get_piece((4,0),'w').get_possible_moves())
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
