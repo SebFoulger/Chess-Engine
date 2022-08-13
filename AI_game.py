@@ -8,7 +8,7 @@ bot=AI_simple(board,"b")
 
 
 while not board.checkmated('w') and not board.checkmated('b'):
-
+    print(board.all_possible_moves('w'))
     input_list=input("White move (from): ").split(",")
     x,y=int(input_list[0]),int(input_list[1])
     input_list=input("White move (to): ").split(",")
@@ -28,7 +28,6 @@ while not board.checkmated('w') and not board.checkmated('b'):
         break
 
     (x,y),(new_x,new_y)=bot.get_move()
-    print((x,y),(new_x,new_y))
 
     black_move=board.make_move((x,y),(new_x,new_y),'b')
 

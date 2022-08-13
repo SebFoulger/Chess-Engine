@@ -19,7 +19,8 @@ def long_moves(piece,temp_list, max_length=8):
     return temp_moves
 
 def king_not_targeted(temp_moves, piece):
-    
+    temp_moves=temp_moves.copy()
+
     i=0
     while i<len(temp_moves):
         temp_board=deepcopy(piece.board)
@@ -30,6 +31,7 @@ def king_not_targeted(temp_moves, piece):
             temp_moves.pop(i)
         else:
             i+=1
+
     return temp_moves
 
 class Move:
@@ -119,11 +121,19 @@ class Board:
                 return self.pieces[0][position[0]][position[1]]
             elif self.pieces[1][7-position[0]][7-position[1]]!=None:
                 return self.pieces[1][7-position[0]][7-position[1]]
+            elif self.kings[0].position==(position[0],position[1]):
+                return self.kings[0]
+            elif self.kings[1].position==(7-position[0],7-position[1]):
+                return self.kings[1]
         else: 
             if self.pieces[0][7-position[0]][7-position[1]]!=None:
                 return self.pieces[0][7-position[0]][7-position[1]]
             elif self.pieces[1][position[0]][position[1]]!=None:
                 return self.pieces[1][position[0]][position[1]]
+            elif self.kings[1].position==(position[0],position[1]):
+                return self.kings[1]
+            elif self.kings[0].position==(7-position[0],7-position[1]):
+                return self.kings[0]
         return None
 
     def move_piece(self,old_position,new_position,move_team):
@@ -158,7 +168,6 @@ class Board:
     
     def make_move(self,old_position,new_position,move_team):
         moving_piece=self.get_piece(old_position,move_team)
-
         if moving_piece==None:
             return False
         elif new_position not in moving_piece.get_possible_moves():
@@ -197,6 +206,7 @@ class Board:
         temp_moves=[]
         for piece in self.current_pieces[['w','b'].index(team)]:
             temp_moves=temp_moves+(list(map(lambda x: (piece.position,x),piece.get_possible_moves(True))))
+        temp_moves=temp_moves+list(map(lambda x: (piece.position,x),self.kings[['w','b'].index(team)].get_possible_moves(True)))
         return temp_moves
 
     def print_board(self, perspective):
@@ -280,7 +290,7 @@ class Piece:
     def in_target(self):
         for piece in self.board.current_pieces[['b','w'].index(self.team)]:
             for move in piece.get_possible_moves(check_bool=False):
-                if self.position==(7-move[0],7-move[1]):
+                if self.position==(7-move[0],7-move[1]) and not (isinstance(piece,Pawn) and move[0]==piece.position[0]):
                     return True
         return False
     
@@ -310,12 +320,12 @@ class Pawn(Piece):
 
         # Move forwards 1:
         if self.position[1]<7:
-            if self.board.get_piece((self.position[0],self.position[1]+1),self.team)==None:
+            if self.board.get_piece((self.position[0],self.position[1]+1),self.team)==None and self.board.get_piece((7-self.position[0],7-self.position[1]-1),{'w':'b','b':'w'}[self.team])==None:
                 temp_moves.append((self.position[0],self.position[1]+1))
             
             # Move forwards 2:
             if self.position[1]<6:
-                if self.board.get_piece((self.position[0],self.position[1]+2),self.team)==None and self.board.get_piece((self.position[0],self.position[1]+1),self.team)==None and not self.has_moved:
+                if self.board.get_piece((self.position[0],self.position[1]+2),self.team)==None and self.board.get_piece((self.position[0],self.position[1]+1),self.team)==None and not self.has_moved and self.board.get_piece((7-self.position[0],7-self.position[1]-2),{'w':'b','b':'w'}[self.team])==None and self.board.get_piece((7-self.position[0],7-self.position[1]-1),{'w':'b','b':'w'}[self.team])==None:
                     temp_moves.append((self.position[0],self.position[1]+2))
             
             # Take up right
@@ -339,6 +349,7 @@ class Pawn(Piece):
                 temp_moves.append((self.position[0]-1,self.position[1]+1))
         if check_bool:
             temp_moves=king_not_targeted(temp_moves,self)
+
 
         return temp_moves
 

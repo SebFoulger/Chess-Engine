@@ -9,7 +9,6 @@ class AI(ABC):
         self.team=team
 
     def get_move(self):
-        print(sorted(self.board.all_possible_moves(self.team),key=lambda x:self.evaluate_move(x),reverse=True))
         return sorted(self.board.all_possible_moves(self.team),key=lambda x:self.evaluate_move(x),reverse=True)[0]
     
     def evaluate_move(self,move):
@@ -24,6 +23,11 @@ class AI(ABC):
 class AI_simple(AI):
     def __init__(self, board: Board, team):
         super().__init__(board,team)
-
+    
+    # One step max score difference heuristic (prioritise checkmate)
     def heuristic(self, board):
+        if board.checkmated(self.team):
+            return -2**10
+        if board.checkmated({'b':'w','w':'b'}[self.team]):
+            return 2**10
         return board.evaluate_score(self.team)-board.evaluate_score({'b':'w','w':'b'}[self.team])
