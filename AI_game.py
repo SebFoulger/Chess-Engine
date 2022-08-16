@@ -4,11 +4,10 @@ from AI_class import *
 board = Board()
 board.print_board('w')
 
-bot=AI_simple(board,"b")
+bot=AI_1step_minimax(board,"b")
 
 
 while not board.checkmated('w') and not board.checkmated('b'):
-    print(board.all_possible_moves('w'))
     input_list=input("White move (from): ").split(",")
     x,y=int(input_list[0]),int(input_list[1])
     input_list=input("White move (to): ").split(",")
@@ -17,6 +16,7 @@ while not board.checkmated('w') and not board.checkmated('b'):
     white_move=board.make_move((x,y),(new_x,new_y),'w')
 
     while not white_move:
+        print("Invalid move")
         input_list=input("White move (from): ").split(",")
         x,y=int(input_list[0]),int(input_list[1])
         input_list=input("White move (to): ").split(",")
